@@ -1,7 +1,7 @@
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, UploadFile,Response
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -32,8 +32,8 @@ app.add_middleware(
 
 # モデルロード
 model =  YOLO('best.pt')  # YOLOモデルのパスを変更してください
-import os
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+model_gemini = genai.GenerativeModel("gemini-2.0-flash")
 openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # 会話状態を管理するフラグ
@@ -55,7 +55,7 @@ async def predict(file: UploadFile):
     img_array = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-    results = model.track(source=frame, persist=True, tracker="bytetrack.yaml", imgsz=(312, 312))
+    results = model.track(source=frame, persist=True, tracker="bytetrack.yaml", imgsz=(320, 320))
 
     if results[0].boxes.id is not None and not conversation_active:
         conversation_active = True
@@ -74,23 +74,15 @@ async def auto_converse():
         prompt = """
 あなたは、ユーザーの毎日のスキンケアを応援する、賢くて優しい「化粧水のボトル」です。
 これからスキンケアやメイクを始めるユーザーに向けて、アドバイスや応援の言葉をかけてあげてください。
-
 # あなたの役割
 - スキンケアの専門家として、ユーザーに寄り添うパートナーです。
 - ユーザーがもっと自分の肌を好きになれるように、ポジティブな気持ちにさせることが目的です。
 
 # 話し方のルール
 - 口調は、親しみやすく、丁寧な「ですます調」を基本とします。
-- 1回の発言は、40文字程度の短くて分かりやすい一言にしてください。
+- 1回の文字程度の短くて分かりやすい一言にしてください。
 - ユーザーを励ましたり、褒めたり、具体的なアドバイスをしたりします。
 
-# セリフの例：
-- 「さぁ、今日のスキンケアを始めましょうか♪」
-- 「お肌、とっても喜んでますよ！」
-- 「優しくパッティングするのがコツです。」
-- 「今日も一日、うるおいのある素敵な肌で！応援してます！」
-- 「その調子！お肌がもちもちになってきましたね。」
-- 「日焼け止めも忘れずに塗ってくださいね。」
 """
         response = model_gemini.generate_content(prompt)
         reply_text = response.text.strip()
@@ -119,11 +111,11 @@ async def auto_converse():
 async def get_audio():
     global latest_audio_filename
     if latest_audio_filename:
-        # 最新のファイル名を返却し、再生済みとしてNoneに戻す
         audio_file_to_play = latest_audio_filename
         latest_audio_filename = None 
         return JSONResponse(content={"audio_url": f"/temp/{audio_file_to_play}"})
-    return JSONResponse(content={"audio_url": None}, status_code=204) # No content
+    # 新しい音声がない場合は、ボディが空の204レスポンスを返す
+    return Response(status_code=204)
 
 @app.post("/stop_conversation")
 async def stop_conversation():
