@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>フル画面カメラ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #ffeaa7);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 0;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.3);
+            transform: scaleX(-1);
+        }
+
+        #video.no-mirror {
+            transform: scaleX(1);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .btn {
+            padding: 15px 25px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.active {
+            background: rgba(46, 204, 113, 0.8);
+            border-color: rgba(46, 204, 113, 1);
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            text-align: center;
+        }
+
+        .loading h2 {
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .loading p {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .error h3 {
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+
+        .camera-info {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            font-size: 14px;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                bottom: 20px;
+                gap: 15px;
+            }
+            
+            .btn {
+                padding: 12px 20px;
+                font-size: 14px;
+            }
+            
+            .camera-info {
+                top: 20px;
+                left: 20px;
+                padding: 10px 15px;
+                font-size: 12px;
+            }
+        }
+
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 15px;
+            z-index: 1000;
+            font-size: 24px;
+            font-weight: bold;
+            animation: fadeInOut 3s ease-in-out;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading" class="loading">
+            <h2>🎥 カメラを起動中...</h2>
+            <p>カメラへのアクセスを許可してください</p>
+            <div class="spinner"></div>
+        </div>
+        
+        <video id="video" autoplay muted playsinline style="display: none;"></video>
+        
+        <div id="camera-info" class="camera-info" style="display: none;">
+            <div>📹 フロントカメラ</div>
+            <div id="resolution">解像度: 取得中...</div>
+        </div>
+        
+        <div class="controls" style="display: none;" id="controls">
+            <button class="btn" id="toggleMirror">🪞 ミラー切替</button>
+            <button class="btn" id="toggleCamera">📷 カメラ切替</button>
+            <button class="btn" id="toggleFullscreen">🔍 フルスクリーン</button>
+            <button class="btn" id="stopCamera">⏹️ 停止</button>
+        </div>
+        
+        <div id="error" style="display: none;"></div>
+
+        <div id="popup" class="popup" style="display: none;">
+            <div class="popup-content">
+                <p>会話スタート！</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStream = null;
+        let currentFacingMode = 'user'; // 'user' for front camera, 'environment' for back camera
+        let isFullscreen = false;
+        let isMirrored = true; // Default to mirrored for makeup mirror effect
+
+        const video = document.getElementById('video');
+        const loading = document.getElementById('loading');
+        const controls = document.getElementById('controls');
+        const errorDiv = document.getElementById('error');
+        const cameraInfo = document.getElementById('camera-info');
+        const resolutionDiv = document.getElementById('resolution');
+
+        async function startCamera(facingMode = 'user') {
+            try {
+                loading.style.display = 'flex';
+                video.style.display = 'none';
+                controls.style.display = 'none';
+                cameraInfo.style.display = 'none';
+                errorDiv.style.display = 'none';
+
+                // Stop existing stream
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                const constraints = {
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                };
+
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                currentFacingMode = facingMode;
+
+                video.onloadedmetadata = () => {
+                    loading.style.display = 'none';
+                    video.style.display = 'block';
+                    controls.style.display = 'flex';
+                    cameraInfo.style.display = 'block';
+                    
+                    // Set initial mirror state
+                    const mirrorBtn = document.getElementById('toggleMirror');
+                    if (isMirrored) {
+                        mirrorBtn.textContent = '🪞 ミラーON';
+                        mirrorBtn.classList.add('active');
+                    }
+                    
+                    // Update resolution info
+                    const track = currentStream.getVideoTracks()[0];
+                    const settings = track.getSettings();
+                    resolutionDiv.textContent = `解像度: ${settings.width}x${settings.height}`;
+                };
+
+            } catch (error) {
+                console.error('カメラエラー:', error);
+                loading.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `
+                    <div class="error">
+                        <h3>⚠️ カメラエラー</h3>
+                        <p>${error.message}</p>
+                        <p>カメラへのアクセスを許可するか、別のブラウザを試してください。</p>
+                        <button class="btn" onclick="startCamera('${currentFacingMode}')">再試行</button>
+                    </div>
+                `;
+            }
+        }
+
+        function toggleMirror() {
+            isMirrored = !isMirrored;
+            const btn = document.getElementById('toggleMirror');
+            
+            if (isMirrored) {
+                video.classList.remove('no-mirror');
+                btn.textContent = '🪞 ミラーON';
+                btn.classList.add('active');
+            } else {
+                video.classList.add('no-mirror');
+                btn.textContent = '🪞 ミラーOFF';
+                btn.classList.remove('active');
+            }
+        }
+
+        function toggleCamera() {
+            const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            startCamera(newFacingMode);
+        }
+
+        function toggleFullscreen() {
+            if (!isFullscreen) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        function stopCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+            }
+            video.style.display = 'none';
+            controls.style.display = 'none';
+            cameraInfo.style.display = 'none';
+            loading.style.display = 'flex';
+            loading.innerHTML = `
+                <h2>📱 カメラが停止されました</h2>
+                <p>再開するには下のボタンをクリック</p>
+                <button class="btn" onclick="startCamera('${currentFacingMode}')">カメラ再開</button>
+            `;
+        }
+
+        // Event listeners
+        document.getElementById('toggleMirror').addEventListener('click', toggleMirror);
+        document.getElementById('toggleCamera').addEventListener('click', toggleCamera);
+        document.getElementById('toggleFullscreen').addEventListener('click', toggleFullscreen);
+        document.getElementById('stopCamera').addEventListener('click', stopCamera);
+
+        // Fullscreen change event
+        document.addEvenhetListener('fullscreenchange', () => {
+            isFullscreen = !!document.fullscreenElement;
+            const btn = document.getElementById('toggleFullscreen');
+            btn.textContent = isFullscreen ? '🔍 終了' : '🔍 フルスクリーン';
+        });
+
+        document.addEventListener('webkitfullscreenchange', () => {
+            isFullscreen = !!document.webkitFullscreenElement;
+            const btn = document.getElementById('toggleFullscreen');
+            btn.textContent = isFullscreen ? '🔍 終了' : '🔍 フルスクリーン';
+        });
+
+        // Start camera on page load
+        window.addEventListener('load', () => {
+            startCamera('user');
+        });
+
+        // Handle page visibility
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Page is hidden, optionally pause
+            } else {
+                // Page is visible, ensure camera is running
+                if (!currentStream && video.style.display === 'block') {
+                    startCamera(currentFacingMode);
+                }
+            }
+        });
+const serverUrl = ""; // デプロイ用にサーバーURLを相対パスに変更
+
+async function captureAndSendFrame() {
+    if (!currentStream) return;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append("file", blob, "frame.jpg");
+        try {
+            const response = await fetch(`${serverUrl}/predict`, {
+                method: "POST",
+                body: formData
+            });
+            const data = await response.json();
+            if (data.conversation_started) {
+                const popup = document.getElementById('popup');
+                popup.style.display = 'block';
+                setTimeout(() => {
+                    popup.style.display = 'none';
+                }, 3000); // 3秒後にポップアップを消す
+            }
+        } catch (err) {
+            console.error("/predict 送信エラー:", err);
+        }
+    }, "image/jpeg");
+}
+
+setInterval(() => {
+    if (currentStream) {
+        captureAndSendFrame();
+    }
+}, 2000); // 2秒ごとに送信
+
+// 5秒ごとに新しい音声がないかサーバーに問い合わせる
+setInterval(async () => {
+    try {
+        const response = await fetch(`${serverUrl}/get_audio`);
+        if (response.status === 200) {
+            const data = await response.json();
+            if (data.audio_url) {
+                console.log("Playing audio:", data.audio_url);
+                const audio = new Audio(data.audio_url);
+                audio.play();
+            }
+        }
+    } catch (err) {
+        console.error("/get_audio 問い合わせエラー:", err);
+    }
+}, 5000);
+    </script>
+</body>
+</html>
