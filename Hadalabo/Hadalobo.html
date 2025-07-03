@@ -384,7 +384,7 @@
                 }
             }
         });
-const serverUrl = "https://192.168.3.28:8000"; // デプロイ用にサーバーURLを相対パスに変更
+const serverUrl = ""; // デプロイ用にサーバーURLを相対パスに変更
 //uvicorn Hadalobo:app --host 0.0.0.0 --port 8000 --ssl-keyfile=192.168.3.28-key.pem --ssl-certfile=192.168.3.28.pem
 async function captureAndSendFrame() {
     if (!currentStream) return;
@@ -425,6 +425,10 @@ setInterval(() => {
 setInterval(async () => {
     try {
         const response = await fetch(`${serverUrl}/get_audio`);
+         if (response.status === 204) {
+            // 新しい音声がまだ生成されていない
+            return;
+        }
         if (response.status === 200) {
             const data = await response.json();
             if (data.audio_url) {
