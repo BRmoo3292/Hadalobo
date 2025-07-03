@@ -356,7 +356,7 @@
         document.getElementById('stopCamera').addEventListener('click', stopCamera);
 
         // Fullscreen change event
-        document.addEvenhetListener('fullscreenchange', () => {
+        document.addEventListener('fullscreenchange', () => {
             isFullscreen = !!document.fullscreenElement;
             const btn = document.getElementById('toggleFullscreen');
             btn.textContent = isFullscreen ? '🔍 終了' : '🔍 フルスクリーン';
