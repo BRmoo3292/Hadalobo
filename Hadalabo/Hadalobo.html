@@ -394,25 +394,23 @@ async function captureAndSendFrame() {
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(async (blob) => {
-        if (blob) {
-            const formData = new FormData();
-            formData.append("file", blob, "frame.jpg");
-            try {
-                const response = await fetch(`${serverUrl}/predict`, {
-                    method: "POST",
-                    body: formData
-                });
-                const data = await response.json();
-                if (data.conversation_started) {
-                    const popup = document.getElementById('popup');
-                    popup.style.display = 'block';
-                    setTimeout(() => {
-                        popup.style.display = 'none';
-                    }, 3000); // 3秒後にポップアップを消す
-                }
-            } catch (err) {
-                console.error("/predict 送信エラー:", err);
+        const formData = new FormData();
+        formData.append("file", blob, "frame.jpg");
+        try {
+            const response = await fetch(`${serverUrl}/predict`, {
+                method: "POST",
+                body: formData
+            });
+            const data = await response.json();
+            if (data.conversation_started) {
+                const popup = document.getElementById('popup');
+                popup.style.display = 'block';
+                setTimeout(() => {
+                    popup.style.display = 'none';
+                }, 3000); // 3秒後にポップアップを消す
             }
+        } catch (err) {
+            console.error("/predict 送信エラー:", err);
         }
     }, "image/jpeg");
 }

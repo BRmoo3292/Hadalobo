@@ -5,11 +5,9 @@ from fastapi import FastAPI, UploadFile,Response
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import base64
 import os
 import tempfile
 import asyncio
-import time
 import google.generativeai as genai
 from openai import AsyncOpenAI
 
