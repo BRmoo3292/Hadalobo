@@ -31,11 +31,10 @@ app.add_middleware(
 )
 
 # モデルロード
-model =  YOLO('best.pt')  # YOLOモデルのパスを変更してください
+model = YOLO('best.pt')  # YOLOモデルのパスを変更してください
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
-model_gemini = genai.GenerativeModel("gemini-2.0-flash")
+model_gemini = genai.GenerativeModel("gemini-2.0-flash")    
 openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
 # 会話状態を管理するフラグ
 conversation_active = False
 
@@ -55,17 +54,13 @@ async def predict(file: UploadFile):
     img_array = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-    results = model(frame, imgsz=(320, 320))
-
-
-    if results and len(results) > 0:
-                result = results[0]
-                if hasattr(result, 'boxes') and result.boxes is not None and len(result.boxes) > 0:
-                    if not conversation_active:
-                        conversation_active = True
-                        conversation_just_started = True
-                        print("[INFO] 物体を検出。会話を開始します。")
-                        conversation_task = asyncio.create_task(auto_converse())
+    results = model(frame, imgsz=320,conf=0.75)
+    if len(results) > 0 and len(results[0].boxes) > 0:
+        if not conversation_active:            
+            conversation_active = True            
+            conversation_just_started = True            
+            print("[INFO] 物体を検出。会話を開始します。")            
+            conversation_task = asyncio.create_task(auto_converse())
 
     return JSONResponse(content={
         "conversation_started": conversation_just_started,
