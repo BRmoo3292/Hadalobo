@@ -384,8 +384,8 @@
                 }
             }
         });
-const serverUrl = ""; // デプロイ用にサーバーURLを相対パスに変更
-//uvicorn Hadalobo:app --host 0.0.0.0 --port 8000 --ssl-keyfile=192.168.0.148-key.pem --ssl-certfile=192.168.0.148.pem
+const serverUrl = "https://172.20.10.6:8000"; // デプロイ用にサーバーURLを相対パスに変更
+//uvicorn Hadalobo:app --host 0.0.0.0 --port 8000 --ssl-keyfile=172.20.10.6-key.pem --ssl-certfile=172.20.10.6.pem
 async function captureAndSendFrame() {
     if (!currentStream) return;
     const canvas = document.createElement("canvas");
