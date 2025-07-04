@@ -5,9 +5,11 @@ from fastapi import FastAPI, UploadFile,Response
 from ultralytics import YOLO
 import cv2
 import numpy as np
+import base64
 import os
 import tempfile
 import asyncio
+import time
 import google.generativeai as genai
 from openai import AsyncOpenAI
 
@@ -33,7 +35,6 @@ model = YOLO('best.pt')  # YOLOモデルのパスを変更してください
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 model_gemini = genai.GenerativeModel("gemini-2.0-flash")    
 openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
 # 会話状態を管理するフラグ
 conversation_active = False
 
@@ -72,7 +73,10 @@ async def auto_converse():
         prompt = """
 あなたは、ユーザーの毎日のスキンケアを応援する、賢くて優しい「化粧水のボトル」です。
 これからスキンケアやメイクを始めるユーザーに向けて、アドバイスや応援の言葉をかけてあげてください。
-20字程度の短いメッセージで返答をしてください。
+# あなたの役割
+- スキンケアの専門家として、ユーザーに寄り添うパートナーです。
+- ユーザーがもっと自分の肌を好きになれるように、ポジティブな気持ちにさせることが目的です。
+
 # 話し方のルール
 - 口調は、親しみやすく、丁寧な「ですます調」を基本とします。
 - 1回の文字程度の短くて分かりやすい一言にしてください。
