@@ -55,13 +55,17 @@ async def predict(file: UploadFile):
     img_array = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-    results = model.track(source=frame, persist=True, tracker="bytetrack.yaml", imgsz=(320, 320))
+    results = model(frame, imgsz=(320, 320))
 
-    if results[0].boxes.id is not None and not conversation_active:
-        conversation_active = True
-        conversation_just_started = True
-        print("[INFO] 物体を検出。会話を開始します。")
-        conversation_task = asyncio.create_task(auto_converse())
+
+    if results and len(results) > 0:
+                result = results[0]
+                if hasattr(result, 'boxes') and result.boxes is not None and len(result.boxes) > 0:
+                    if not conversation_active:
+                        conversation_active = True
+                        conversation_just_started = True
+                        print("[INFO] 物体を検出。会話を開始します。")
+                        conversation_task = asyncio.create_task(auto_converse())
 
     return JSONResponse(content={
         "conversation_started": conversation_just_started,
