@@ -1,8 +1,8 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-ultralytics==8.0.0
-opencv-python-headless==4.8.1.78  # headless版を使用
-google-generativeai==0.3.0
-openai==1.3.0
-numpy==1.24.3
+fastapi
+uvicorn
+numpy
+opencv-python-headless
+ultralytics
+google-generativeai
+openai
+python-dotenv
