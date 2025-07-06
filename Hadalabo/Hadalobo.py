@@ -29,9 +29,7 @@ app.add_middleware(
 )
 
 # モデルロード
-model = YOLO('best.pt')  # YOLOモデルのパスを変更してください
-genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
-model_gemini = genai.GenerativeModel("gemini-2.0-flash")    
+model = YOLO('best.pt')  # YOLOモデルのパスを変更してください 
 openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # 会話状態を管理するフラグ

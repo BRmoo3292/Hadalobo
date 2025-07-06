@@ -6,3 +6,4 @@ ultralytics
 google-generativeai
 openai
 python-dotenv
+python-multipart
