@@ -5,11 +5,9 @@ from fastapi import FastAPI, UploadFile,Response
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import base64
 import os
 import tempfile
 import asyncio
-import time
 import google.generativeai as genai
 from openai import AsyncOpenAI
 
@@ -35,8 +33,11 @@ model = YOLO('best.pt')  # YOLOモデルのパスを変更してください
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 model_gemini = genai.GenerativeModel("gemini-2.0-flash")    
 openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
 # 会話状態を管理するフラグ
 conversation_active = False
+# 物体検出を停止するフラグ
+object_detection_active = True
 
 # 会話ループを管理するタスク
 conversation_task = None
@@ -44,9 +45,21 @@ conversation_task = None
 # 最新の音声ファイルパスを保存する変数
 latest_audio_filename = None
 
+# 音声認識の状態を管理
+listening_for_speech = False
+speech_recognized = False
+recognized_text = ""
+
 @app.post("/predict")
 async def predict(file: UploadFile):
-    global conversation_active, conversation_task
+    global conversation_active, conversation_task, object_detection_active
+    
+    # 物体検出が無効になっている場合は処理をスキップ
+    if not object_detection_active:
+        return JSONResponse(content={
+            "conversation_started": False,
+            "object_detection_disabled": True
+        })
     
     conversation_just_started = False
 
@@ -54,40 +67,42 @@ async def predict(file: UploadFile):
     img_array = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-    results = model(frame, imgsz=320,conf=0.75)
+    results = model(frame, imgsz=320, conf=0.75)
     if len(results) > 0 and len(results[0].boxes) > 0:
         if not conversation_active:            
-            conversation_active = True            
+            conversation_active = True
+            object_detection_active = False  # 物体検出を停止
             conversation_just_started = True            
-            print("[INFO] 物体を検出。会話を開始します。")            
+            print("[INFO] 物体を検出。会話を開始します。物体検出を停止します。")            
             conversation_task = asyncio.create_task(auto_converse())
 
     return JSONResponse(content={
         "conversation_started": conversation_just_started,
+        "object_detection_disabled": not object_detection_active
     })
 
+
+
 async def auto_converse():
-    global conversation_active, latest_audio_filename
+    global conversation_active, latest_audio_filename, listening_for_speech, speech_recognized, recognized_text
 
+    fixed_messages = [
+        {"text": "今日も一日おつかれさまでした。今はスキンケア中かな？肌にやさしく触れながら、今日のこと、少しお話ししませんか？", "listen": False},
+        {"text": "まずは、今日一日を通して、いちばん心に残っていることは何ですか？", "listen": True},
+        {"text": "今日、あなたができたなと思えることって、何かありましたか？", "listen": True},
+        {"text": "心のエネルギーは何％くらい残っている感じですか？", "listen": True},
+        {"text": "保肌も心も、今日はたくさん働いてくれました。保湿もできたし、あとはゆっくりおやすみタイムですね。", "listen": False},
+        {"text": "よかったら、明日に向けたひとこと目標を決めてみませんか？明日は、どんな一日にしたいですか？", "listen": True},
+        {"text": "では、今日はこのへんで。おやすみなさい。また明日、お話しできるのを楽しみにしています。", "listen": False}
+    ]
+    index = 0  # 現在のメッセージインデックス
+    
     while conversation_active:
-        prompt = """
-あなたは、ユーザーの毎日のスキンケアを応援する、賢くて優しい「化粧水のボトル」です。
-これからスキンケアやメイクを始めるユーザーに向けて、アドバイスや応援の言葉をかけてあげてください。
-# あなたの役割
-- スキンケアの専門家として、ユーザーに寄り添うパートナーです。
-- ユーザーがもっと自分の肌を好きになれるように、ポジティブな気持ちにさせることが目的です。
-
-# 話し方のルール
-- 口調は、親しみやすく、丁寧な「ですます調」を基本とします。
-- 1回の文字程度の短くて分かりやすい一言にしてください。
-- ユーザーを励ましたり、褒めたり、具体的なアドバイスをしたりします。
-
-"""
-        response = model_gemini.generate_content(prompt)
-        reply_text = response.text.strip()
-
-        print("[会話] 応答:", reply_text)
-
+        message_info = fixed_messages[index]
+        reply_text = message_info["text"]
+        should_listen = message_info["listen"]
+        print(f"[会話] 応答: {reply_text}")
+        
         # TTS音声生成
         async with openai_client.audio.speech.with_streaming_response.create(
             model="gpt-4o-mini-tts",
@@ -100,11 +115,17 @@ async def auto_converse():
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3", dir=temp_dir) as tts_file:
                 async for chunk in response.iter_bytes():
                     tts_file.write(chunk)
-                # ファイル名を保存
                 latest_audio_filename = os.path.basename(tts_file.name)
                 print(f"[INFO] 音声ファイルを作成しました: {latest_audio_filename}")
 
-        await asyncio.sleep(10)  # 次の発話までの待機時間（10秒）
+            await asyncio.sleep(10)
+
+
+        index += 1
+        if index >= len(fixed_messages):
+                print("[INFO] すべての定型文が終了しました。会話を終了します。")
+                conversation_active = False
+                break
 
 @app.get("/get_audio")
 async def get_audio():
@@ -118,10 +139,12 @@ async def get_audio():
 
 @app.post("/stop_conversation")
 async def stop_conversation():
-    global conversation_active
+    global conversation_active, object_detection_active, listening_for_speech
     conversation_active = False
-    print("[INFO] 会話を停止しました。")
-    return {"message": "Conversation stopped"}
+    object_detection_active = True  # 物体検出を再開
+    listening_for_speech = False
+    print("[INFO] 会話を停止しました。物体検出を再開します。")
+    return {"message": "Conversation stopped, object detection resumed"}
 
 @app.get("/")
 def read_root():
