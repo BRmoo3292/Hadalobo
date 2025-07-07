@@ -66,9 +66,8 @@ else:
     logger.warning("OPENAI_API_KEY not found")
     openai_client = None
 
-# 状態管理
+# 状態管理（物体検出は常時有効なので object_detection_active を削除）
 conversation_active = False
-object_detection_active = True
 conversation_task = None
 latest_audio_filename = None
 listening_for_speech = False
@@ -127,31 +126,29 @@ async def send_image_to_gpu_server(image_bytes):
 
 @app.post("/predict")
 async def predict(file: UploadFile):
-    global conversation_active, conversation_task, object_detection_active
-    
-    if not object_detection_active:
-        return JSONResponse(content={
-            "conversation_started": False,
-            "object_detection_disabled": True
-        })
+    global conversation_active, conversation_task
     
     conversation_just_started = False
     img_bytes = await file.read()
     
-    # GPU推論サーバーに画像を送信
+    # 🎯 常に物体検出を実行
     objects_detected = await send_image_to_gpu_server(img_bytes)
     
-    if objects_detected:
-        if not conversation_active:            
-            conversation_active = True
-            object_detection_active = False
-            conversation_just_started = True            
-            logger.info("物体を検出。会話を開始します。")            
-            conversation_task = asyncio.create_task(auto_converse())
+    # 🛡️ 会話中でない場合のみ新しい会話を開始
+    if objects_detected and not conversation_active:
+        conversation_active = True
+        conversation_just_started = True            
+        logger.info("物体を検出。会話を開始します。")            
+        conversation_task = asyncio.create_task(auto_converse())
+    elif objects_detected and conversation_active:
+        # 会話中に物体検出された場合はログのみ
+        logger.info("会話中のため物体検出を無視しました")
 
     return JSONResponse(content={
         "conversation_started": conversation_just_started,
-        "object_detection_disabled": not object_detection_active
+        "objects_detected": objects_detected,
+        "conversation_active": conversation_active,
+        "detection_ignored": objects_detected and conversation_active  # デバッグ用
     })
 
 async def auto_converse():
@@ -197,6 +194,7 @@ async def auto_converse():
             logger.warning("OpenAI client not available, skipping TTS")
             await asyncio.sleep(5)
 
+    # 会話終了
     logger.info("会話終了")
     conversation_active = False
 
@@ -211,12 +209,11 @@ async def get_audio():
 
 @app.post("/stop_conversation")
 async def stop_conversation():
-    global conversation_active, object_detection_active, listening_for_speech
+    global conversation_active, listening_for_speech
     conversation_active = False
-    object_detection_active = True
     listening_for_speech = False
-    logger.info("会話を停止しました。物体検出を再開します。")
-    return {"message": "Conversation stopped, object detection resumed"}
+    logger.info("会話を停止しました。物体検出は継続します。")
+    return {"message": "Conversation stopped, object detection continues"}
 
 @app.get("/health")
 async def health_check():
@@ -226,7 +223,15 @@ async def health_check():
         "gpu_url_configured": bool(GPU_INFERENCE_URL),
         "openai_configured": bool(OPENAI_API_KEY),
         "conversation_active": conversation_active,
-        "object_detection_active": object_detection_active
+        "object_detection": "always_active"  # 常に有効
+    }
+
+@app.get("/status")
+async def get_status():
+    return {
+        "conversation_active": conversation_active,
+        "object_detection": "always_active",
+        "timestamp": time.time()
     }
 
 @app.get("/")
